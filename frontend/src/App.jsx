@@ -10,7 +10,7 @@ import UserSignUp from './components/UserSignUp';
 
 // Auth checks
 const isAdminAuthenticated = () => localStorage.getItem('adminToken') !== null;
-const isUserAuthenticated = () => localStorage.getItem('userToken') !== null;
+const isAuthenticated = () => localStorage.getItem("userToken") !== null;
 
 // Protected Route Component
 const ProtectedRoute = ({ children, authCheck }) => {
