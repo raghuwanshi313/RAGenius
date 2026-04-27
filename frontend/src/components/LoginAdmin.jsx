@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { RiAdminLine } from "react-icons/ri";
 import { useNavigate } from "react-router-dom";
 import GradientText from "./ui/GradientText";
+import axios from "axios";
 
 
 function LoginAdmin() {
@@ -12,19 +13,25 @@ function LoginAdmin() {
   });
   const [error, setError] = useState("");
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // This is a simple example - replace with your actual authentication logic
-    if (
-      formData.email === "admin@example.com" &&
-      formData.password === "admin123"
-    ) {
-      localStorage.setItem("adminToken", "your-auth-token");
-      navigate("/admin/dashboard");
-    } else {
+    setError("");
+  
+    try {
+      const response = await axios.post("/api/admin/login", {
+        email: formData.email,
+        password: formData.password,
+      });
+  
+      if (response.data.token) {
+        localStorage.setItem("adminToken", response.data.token);
+        navigate("/admin/dashboard");
+      }
+    } catch (err) {
       setError("Invalid credentials");
     }
   };
+  
 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">

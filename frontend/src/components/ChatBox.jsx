@@ -10,16 +10,15 @@ import { IoMdSettings, IoMdLogOut } from "react-icons/io";
 import { SkeletonDemo } from "./ui/SkeletonDemo";
 import { IoMdLogIn } from "react-icons/io";
 import { FaHistory } from "react-icons/fa";
+import axios from "axios";
 
 function ChatBox({ onClose }) {
   const navigate = useNavigate();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [chatHistory, setChatHistory] = useState([
-    // Sample history data - replace with actual data from your backend
-    { id: 1, query: "Sample question 1", response: "Sample answer 1" },
-    { id: 2, query: "Sample question 2", response: "Sample answer 2" },
-  ]);
+  const [chatHistory, setChatHistory] = useState([]);
+  const [message, setMessage] = useState("");
+  const [showConversation, setShowConversation] = useState(false);
 
   useEffect(() => {
     // Check if user is logged in
@@ -43,6 +42,32 @@ function ChatBox({ onClose }) {
 
   const handleHistoryClick = () => {
     setShowHistory(!showHistory);
+  };
+
+  const handleSendMessage = async () => {
+    if (!message.trim()) return;
+
+    try {
+      const response = await axios.post("/api/query", {
+        question: message,
+      });
+
+      setChatHistory((prev) => [
+        ...prev,
+        { query: message, response: response.data.answer || "No answer found" },
+      ]);
+    } catch (error) {
+      if (error.response && error.response.status === 404) {
+        setChatHistory((prev) => [
+          ...prev,
+          { query: message, response: "No answer found. Your query has been logged." },
+        ]);
+      } else {
+        console.error("Error sending message:", error);
+      }
+    }
+    setShowConversation(true)
+    setMessage("");
   };
 
   return (
@@ -108,7 +133,7 @@ function ChatBox({ onClose }) {
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        {/* <div className="flex-1 overflow-y-auto p-4">
           {showHistory ? (
             isLoggedIn ? (
               <div className="space-y-4">
@@ -141,9 +166,31 @@ function ChatBox({ onClose }) {
               </div>
             </>
           )}
-        </div>
+        </div> */}
 
-        <div className="p-4 ">
+        {showConversation ? (
+          <div className="space-y-4">
+            {console.log(chatHistory)}
+          {chatHistory.map((chat) => (
+            <div key={chat.query.length} className="bg-gray-800 rounded-lg p-3">
+              <p className="text-blue-400 font-medium">Query: {chat.query}</p>
+              <p className="text-white mt-2">Response: {chat.response}</p>
+            </div>  
+          ))}
+        </div>
+        ) : (
+          <>
+            <div className="mt-3">
+              <SkeletonDemo className="mt-3" />
+            </div>
+            <div className="mt-3">
+              <SkeletonDemo className="mt-3" />
+            </div>
+          </>
+        )}
+        
+        {/* <div className="p-4 "> */}
+        <div className="mt-auto p-4">
           <div className="flex gap-2 items-end">
             <div className="flex-1">
               <Label htmlFor="message" className="text-white sr-only">
@@ -152,10 +199,12 @@ function ChatBox({ onClose }) {
               <Textarea
                 placeholder="Type your message here."
                 id="message"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
                 className="min-h-[50px] max-h-[100px] text-white"
               />
             </div>
-            <Button className="h-[50px] px-4">
+            <Button className="h-[50px] px-4" onClick={handleSendMessage}>
               <IoSend className="h-5 w-5" />
             </Button>
           </div>

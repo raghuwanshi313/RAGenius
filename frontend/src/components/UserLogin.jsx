@@ -2,37 +2,38 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { FaUserGraduate } from "react-icons/fa";
 import GradientText from "./ui/GradientText";
+import axios from "axios";
 
-function UserSignUp() {
-  const [userData, setUserData] = useState({
+function UserLogin() {
+  const [credentials, setCredentials] = useState({
     username: "",
-    email: "",
     password: "",
-    confirmPassword: "",
   });
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit =async (e) => {
     e.preventDefault();
     setError(null);
-
-    if (!userData.username || !userData.email || !userData.password || !userData.confirmPassword) {
+    // console.log(credentials)
+    if (!credentials.username || !credentials.password) {
       setError("Please fill in all fields");
       return;
     }
-
-    if (userData.password !== userData.confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-
+    // console.log(credentials)
     try {
-      // Add your signup logic here
-      localStorage.setItem("userToken", "dummy-token");
-      navigate("/");
+      const response = await axios.post("/api/login", {
+        username: credentials.username,
+        password: credentials.password,
+      });
+      
+      if (response.data.token) {
+        localStorage.setItem("userToken", response.data.token);
+        navigate("/");
+      }
     } catch (err) {
-      setError("Signup failed. Please try again.");
+      console.log(err);
+      setError("Invalid credentials");
     }
   };
 
@@ -42,10 +43,10 @@ function UserSignUp() {
         <div className="flex flex-col items-center">
           <FaUserGraduate className="text-8xl text-indigo-500" />
           <GradientText className="mt-6 text-center text-3xl font-extrabold">
-            Create Account
+            User Login
           </GradientText>
         </div>
-
+        
         <form onSubmit={handleSubmit} className="space-y-6 mt-8">
           {error && (
             <div className="text-red-500 text-center text-sm">{error}</div>
@@ -56,20 +57,9 @@ function UserSignUp() {
                 type="text"
                 placeholder="Username"
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-700 placeholder-gray-500 text-white bg-gray-800 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                value={userData.username}
+                value={credentials.username}
                 onChange={(e) =>
-                  setUserData({ ...userData, username: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <input
-                type="email"
-                placeholder="Email"
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-700 placeholder-gray-500 text-white bg-gray-800 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                value={userData.email}
-                onChange={(e) =>
-                  setUserData({ ...userData, email: e.target.value })
+                  setCredentials({ ...credentials, username: e.target.value })
                 }
               />
             </div>
@@ -77,21 +67,10 @@ function UserSignUp() {
               <input
                 type="password"
                 placeholder="Password"
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-700 placeholder-gray-500 text-white bg-gray-800 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                value={userData.password}
-                onChange={(e) =>
-                  setUserData({ ...userData, password: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <input
-                type="password"
-                placeholder="Confirm Password"
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-700 placeholder-gray-500 text-white bg-gray-800 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                value={userData.confirmPassword}
+                value={credentials.password}
                 onChange={(e) =>
-                  setUserData({ ...userData, confirmPassword: e.target.value })
+                  setCredentials({ ...credentials, password: e.target.value })
                 }
               />
             </div>
@@ -101,13 +80,13 @@ function UserSignUp() {
               type="submit"
               className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
             >
-              Sign Up
+              Sign in
             </button>
           </div>
           <div className="text-center text-sm">
-            <span className="text-gray-500">Already have an account? </span>
-            <Link to="/login" className="text-indigo-500 hover:text-indigo-400">
-              Sign in
+            <span className="text-gray-500">Don't have an account? </span>
+            <Link to="/signup" className="text-indigo-500 hover:text-indigo-400">
+              Sign up
             </Link>
           </div>
         </form>
@@ -116,4 +95,4 @@ function UserSignUp() {
   );
 }
 
-export default UserSignUp;
+export default UserLogin;
