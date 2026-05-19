@@ -26,6 +26,9 @@ from reportlab.lib.pagesizes import letter
 import os.path
 from time import time
 from difflib import SequenceMatcher
+from textblob import TextBlob
+from collections import defaultdict, Counter
+from flask_mail import Mail, Message
 
 # Load environment variables
 load_dotenv()
@@ -38,6 +41,15 @@ os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
 
 app = Flask(__name__)
 CORS(app)
+
+# Configure Flask-Mail
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'  # or another SMTP
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.getenv("EMAIL_USER")
+app.config['MAIL_PASSWORD'] = os.getenv("EMAIL_PASS")
+
+mail = Mail(app)
 
 app.config["SECRET_KEY"] = "your_secret_key"  # Use a secure secret key
 
@@ -357,9 +369,23 @@ def query():
         
         if any(phrase in answer.lower() for phrase in no_answer_phrases):
             print("No answer found - adding to unanswered queries")
+            # Default user_id to None
+            user_id = None
+            
+            if user_token:
+                try:
+                    # Decode token to get user_id
+                    payload = jwt.decode(user_token.split(' ')[1], 
+                                    app.config["SECRET_KEY"], 
+                                    algorithms=["HS256"])
+                    user_id = ObjectId(payload.get('user_id'))
+                except Exception as e:
+                    print(f"Error decoding token for unanswered query: {str(e)}")
+
             queries_collection.insert_one({
                 "question": question, 
                 "answered": False,
+                "user_id": user_id,
                 "timestamp": datetime.datetime.utcnow()
             })
             return jsonify({
@@ -417,7 +443,9 @@ def get_unanswered_queries():
     unanswered = list(queries_collection.find({"answered": False}))
     for query in unanswered:
         query["_id"] = str(query["_id"])
-    print(unanswered)
+    if "user_id" in query and query["user_id"] is not None:
+            query["user_id"] = str(query["user_id"])  # Convert ObjectId to string
+    print("Unanswered queries:", unanswered)
     return jsonify({"queries": unanswered}), 200
 
 @app.route('/api/delete-query/<query_id>', methods=['DELETE'])
@@ -526,6 +554,8 @@ def add_response():
     query_doc = queries_collection.find_one({"_id": ObjectId(query_id)})
     if not query_doc:
         return jsonify({"error": "Query not found"}), 404
+    
+    user_id = query_doc.get("user_id")
 
     # Update database
     queries_collection.update_one(
@@ -549,6 +579,31 @@ def add_response():
         except Exception as e:
             print(f"Error updating vectorstore: {str(e)}")
             # Continue even if vectorstore update fails
+
+    # ✅ Notify user via email
+    try:
+        if user_id:
+            user = users_collection.find_one({"_id": ObjectId(user_id)})
+            if user and user.get("email"):
+                email = user["email"]
+                msg = Message(
+                    subject="Your query has been answered!",
+                    sender=app.config["MAIL_USERNAME"],
+                    recipients=[email],
+                    body=f"""Hello,
+
+Your question: "{query_doc['question']}"
+Has been answered: "{response}"
+
+Thank you for your patience!
+
+- Sahayak: The Support Team
+"""
+                )
+                mail.send(msg)
+                print(f"Email sent to {email}")
+    except Exception as e:
+        print(f"Error sending email: {str(e)}")
     
     return jsonify({"message": "Response added successfully"})
 
@@ -663,6 +718,73 @@ def get_admin_stats():
         
     except Exception as e:
         print(f"Error fetching stats: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+import datetime  # make sure datetime is imported if not already
+
+@app.route('/api/admin/query-analytics', methods=['GET'])
+def get_query_analytics():
+    admin_token = request.headers.get('Authorization')
+    if not admin_token:
+        return jsonify({"error": "Authentication required"}), 401
+    try:
+        # Verify admin token
+        payload = jwt.decode(admin_token.split(' ')[1], app.config["SECRET_KEY"], algorithms=["HS256"])
+        if payload.get('role') != 'admin':
+            return jsonify({"error": "Admin access required"}), 403
+
+        # Query chat_history_collection to fetch all questions with timestamps
+        # (Here we assume questions from users are stored in "question")
+        queries = list(chat_history_collection.find({}, {"question": 1, "timestamp": 1}))
+
+        sentiment_by_date = defaultdict(list)
+        word_counter = Counter()
+        # A simple stopwords list – extend it as needed.
+        stopwords = set(["the", "is", "at", "on", "and", "a", "an", "to", "of", "in", "i", "you", "it"])
+
+        for record in queries:
+            question = record.get("question")
+            ts = record.get("timestamp")
+            if not question or not ts:
+                continue
+
+            # Convert the timestamp to date string:
+            if isinstance(ts, datetime.datetime):
+                date_str = ts.date().isoformat()
+            else:
+                date_str = str(ts).split("T")[0]
+
+            # Analyze sentiment using TextBlob
+            polarity = TextBlob(question).sentiment.polarity
+            sentiment_by_date[date_str].append(polarity)
+
+            # Count words for trending topics (do a simple word count)
+            for word in question.lower().split():
+                # Remove non-alphanumeric characters
+                word = ''.join([ch for ch in word if ch.isalnum()])
+                if word and word not in stopwords:
+                    word_counter[word] += 1
+
+        # Prepare sentiment analytics: average sentiment per date
+        sentiment_analytics = []
+        for date, polarities in sentiment_by_date.items():
+            avg_sentiment = sum(polarities) / len(polarities)
+            sentiment_analytics.append({
+                "date": date,
+                "avg_sentiment": avg_sentiment,
+                "count": len(polarities)
+            })
+
+        # Get trending topics – top 5 words
+        trending_topics = word_counter.most_common(5)
+
+        return jsonify({
+            "sentiment_analytics": sentiment_analytics,
+            "trending_topics": trending_topics
+        }), 200
+
+    except Exception as e:
+        print(f"Error in analytics endpoint: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
